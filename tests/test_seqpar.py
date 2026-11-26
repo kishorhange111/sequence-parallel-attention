@@ -90,3 +90,16 @@ def test_zigzag_balances_causal_work():
     assert max(contiguous) / min(contiguous) == pytest.approx(31 / 3)  # (4P−1) / 3 units
     # The critical path (slowest rank) shrinks by almost 2×.
     assert max(contiguous) / max(zigzag) == pytest.approx(31 / 17)
+
+
+def test_bench_counts_bytes_and_matches_full_attention():
+    """The benchmark's own shapes (B = 1, H = 8) once made Ulysses receive into a strided
+    buffer, which gloo rejects; this runs it end to end and checks the byte counts."""
+    from seqpar import bench
+
+    res = bench.run(2, {"B": 1, "H": 8, "L": 64, "D": 8, "reps": 1})
+    local = 8 * 64 * 8 * 4 // 2
+    # ring also passes the int64 key positions (L / P of them) along with K and V
+    extra = res[0]["ring, zigzag"]["bytes_sent"] - (2 * 1 + 4 * 2) * local
+    assert 0 < extra <= 3 * (64 // 2) * 8
+    assert res[0]["ulysses"]["bytes_sent"] == 8 * local // 2

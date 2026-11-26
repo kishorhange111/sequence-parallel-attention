@@ -72,7 +72,9 @@ def all_to_all(chunks, group=None):
     """``chunks[j]`` goes to rank j; returns the list received from every rank. This uses
     point-to-point ops so it works on gloo; NCCL would use ``all_to_all_single``."""
     r, P = dist.get_rank(group), dist.get_world_size(group)
-    out = [torch.empty_like(c) for c in chunks]
+    # contiguous receive buffers: empty_like would copy a chunk's strides, and gloo rejects
+    # non-contiguous tensors (a head-dim chunk of (B, H, L, D) is strided once B > 1)
+    out = [torch.empty_like(c, memory_format=torch.contiguous_format) for c in chunks]
     out[r] = chunks[r].clone()
     ops = []
     for j in range(P):
